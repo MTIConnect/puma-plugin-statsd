@@ -18,7 +18,8 @@ Puma::Plugin.create do
       statsd_config = [@host, @port.to_i]
       @client = Statsd.new(*statsd_config).tap do |client|
         # A small hack to add tags. Bypassing the postfix formatting enforced by the statsd client.
-        client.instance_variable_set(:@postfix, ",env=#{App.namespace}")
+        tags = ENV.fetch('APP_STATSD_TAGS', '')
+        client.instance_variable_set(:@postfix, ",#{tags}") if tags != ''
       end
     end
 
