@@ -19,15 +19,13 @@ Add this gem to your Gemfile with puma and then bundle:
 
 ```ruby
 gem "puma"
-gem "puma-plugin-statsd"
+gem "puma-plugin-statsd", github: 'MTIConnect/puma-plugin-statsd'
 ```
 
 Add it to your puma config:
 
 ```ruby
 # config/puma.rb
-
-bind "http://127.0.0.1:9292"
 
 workers 1
 threads 8, 16
@@ -40,11 +38,11 @@ plugin :statsd
 Ensure you have an environment variable set that points to a statsd host, then boot your puma app as usual.  Optionally you may specify a port (default is 8125). 
 
 ```
-STATSD_HOST=127.0.0.1 bundle exec puma
+APP_STATSD_HOST=127.0.0.1 bundle exec puma
 ```
 
 ```
-STATSD_HOST=127.0.0.1 MY_POD_NAME=foo STATSD_PORT=9125 bundle exec puma
+APP_STATSD_HOST=127.0.0.1 MY_POD_NAME=foo APP_STATSD_PORT=9125 bundle exec puma
 ```
 
 ### Datadog Integration

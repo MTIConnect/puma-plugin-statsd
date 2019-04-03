@@ -8,29 +8,23 @@ require "puma/plugin"
 
 Puma::Plugin.create do
 
-  class Statsd
-    ENV_NAME = "STATSD_HOST"
-    STATSD_TYPES = { count: 'c', gauge: 'g' }
-
-    attr_reader :host, :port
+  # uses statsd-ruby client
+  class PumaStatsd
+    attr_reader :host, :client
 
     def initialize
-      @host = ENV.fetch(ENV_NAME, nil)
-      @port = ENV.fetch("STATSD_PORT", 8125)
+      @host = ENV.fetch('APP_STATSD_HOST', '127.0.0.1')
+      port = ENV.fetch('APP_STATSD_PORT', 9125)
+      statsd_config = [@host, @port.to_i]
+      @client = Statsd.new(*statsd_config).tap do |client|
+        # A small hack to add tags. Bypassing the postfix formatting enforced by the statsd client.
+        tags = ENV.fetch('APP_STATSD_TAGS', '')
+        client.instance_variable_set(:@postfix, ",#{tags}") if tags != ''
+      end
     end
 
     def enabled?
       !!host
-    end
-
-    def send(metric_name:, value:, type:, tags: {})
-      data = "#{metric_name}:#{value}|#{STATSD_TYPES.fetch(type)}"
-      if tags.any?
-        tag_str = tags.map { |k,v| "#{k}:#{v}" }.join(",")
-        data = "#{data}|##{tag_str}"
-      end
-
-      UDPSocket.new.send(data, 0, host, port)
     end
   end
 
@@ -94,12 +88,12 @@ Puma::Plugin.create do
   def start(launcher)
     @launcher = launcher
 
-    @statsd = Statsd.new
+    @statsd = PumaStatsd.new
     if @statsd.enabled?
       @launcher.events.debug "statsd: enabled (host: #{@statsd.host})"
       register_hooks
     else
-      @launcher.events.debug "statsd: not enabled (no #{Statsd::ENV_NAME} env var found)"
+      @launcher.events.debug "statsd: not enabled (no statsd client configured)"
     end
   end
 
@@ -131,12 +125,12 @@ Puma::Plugin.create do
       @launcher.events.debug "statsd: notify statsd"
       begin
         stats = PumaStats.new(fetch_stats)
-        @statsd.send(metric_name: "puma.workers", value: stats.workers, type: :gauge, tags: tags)
-        @statsd.send(metric_name: "puma.booted_workers", value: stats.booted_workers, type: :gauge, tags: tags)
-        @statsd.send(metric_name: "puma.running", value: stats.running, type: :gauge, tags: tags)
-        @statsd.send(metric_name: "puma.backlog", value: stats.backlog, type: :gauge, tags: tags)
-        @statsd.send(metric_name: "puma.pool_capacity", value: stats.pool_capacity, type: :gauge, tags: tags)
-        @statsd.send(metric_name: "puma.max_threads", value: stats.max_threads, type: :gauge, tags: tags)
+        @statsd.client.gauge('puma_workers', stats.workers)
+        @statsd.client.gauge('puma_booted_workers', stats.booted_workers)
+        @statsd.client.gauge('puma_backlog', stats.backlog)
+        @statsd.client.gauge('puma_running', stats.running)
+        @statsd.client.gauge('puma_pool_capacity', stats.pool_capacity)
+        @statsd.client.gauge('puma_max_threads', stats.max_threads)
       rescue StandardError => e
         @launcher.events.error "! statsd: notify stats failed:\n  #{e.to_s}\n  #{e.backtrace.join("\n    ")}"
       ensure
