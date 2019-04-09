@@ -4,6 +4,7 @@ require "json"
 require 'socket'
 require "puma"
 require "puma/plugin"
+require "statsd-ruby"
 
 
 Puma::Plugin.create do
@@ -15,7 +16,7 @@ Puma::Plugin.create do
     def initialize
       @host = ENV.fetch('APP_STATSD_HOST', '127.0.0.1')
       port = ENV.fetch('APP_STATSD_PORT', 9125)
-      statsd_config = [@host, @port.to_i]
+      statsd_config = [@host, port.to_i]
       @client = Statsd.new(*statsd_config).tap do |client|
         # A small hack to add tags. Bypassing the postfix formatting enforced by the statsd client.
         tags = ENV.fetch('APP_STATSD_TAGS', '')
